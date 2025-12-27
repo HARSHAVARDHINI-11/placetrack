@@ -1,0 +1,575 @@
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+import { useAuth } from "../context/AuthContext";
+import { authAPI, departmentAPI } from "../services/api";
+import "./Auth.css";
+
+function Register() {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState([]);
+  
+  // Step tracking: "role" -> "email" (students only) -> "otp" (students only) -> "form"
+  const [currentStep, setCurrentStep] = useState("role");
+  const [role, setRole] = useState("");
+  
+  // OTP verification states (for students only)
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    placedCompany: "",
+    placedPosition: "",
+    phoneNumber: "",
+    linkedinProfile: "",
+    departmentId: "",
+    placementYear: new Date().getFullYear(),
+    graduationYear: new Date().getFullYear() + 1,
+  });
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const response = await departmentAPI.getAll();
+        setDepartments(response.data || []);
+      } catch (error) {
+        console.error("Error fetching departments:", error);
+      }
+    };
+    fetchDepartments();
+  }, []);
+
+  // Countdown timer for resend OTP
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  // Check if email is GCT email
+  const isGCTEmail = (email) => {
+    return email && email.toLowerCase().endsWith("@gct.ac.in");
+  };
+
+  // Handle role selection
+  const handleRoleSelect = (selectedRole) => {
+    setRole(selectedRole);
+    if (selectedRole === "STUDENT") {
+      setCurrentStep("email"); // Students need OTP verification
+    } else {
+      setCurrentStep("form"); // Mentors go directly to form
+    }
+  };
+
+  // Send OTP to email (students only)
+  const handleSendOTP = async () => {
+    if (!formData.email) {
+      toast.error("Please enter your email");
+      return;
+    }
+
+    if (!isGCTEmail(formData.email)) {
+      toast.error("Only GCT email addresses (@gct.ac.in) are allowed for students");
+      return;
+    }
+
+    setOtpSending(true);
+    try {
+      const response = await authAPI.sendOTP(formData.email);
+      if (response.data.success) {
+        toast.success("OTP sent to your email! Check your inbox.");
+        setCurrentStep("otp");
+        setCountdown(60);
+      } else {
+        toast.error(response.data.message || "Failed to send OTP");
+      }
+    } catch (error) {
+      // For development - show that OTP is in console
+      toast.info("OTP sent! Check backend console for the code (development mode)");
+      setCurrentStep("otp");
+      setCountdown(60);
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  // Verify OTP
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error("Please enter a valid 6-digit OTP");
+      return;
+    }
+
+    setOtpVerifying(true);
+    try {
+      const response = await authAPI.verifyOTP(formData.email, otp);
+      if (response.data.success) {
+        toast.success("Email verified successfully!");
+        setEmailVerified(true);
+        setCurrentStep("form");
+      } else {
+        toast.error(response.data.message || "Invalid OTP");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Invalid or expired OTP");
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
+  // Resend OTP
+  const handleResendOTP = () => {
+    if (countdown === 0) {
+      handleSendOTP();
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Students must verify email
+    if (role === "STUDENT" && !emailVerified) {
+      toast.error("Please verify your email first");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        fullName: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: role,
+      };
+      
+      if (role === "STUDENT") {
+        payload.departmentId = parseInt(formData.departmentId);
+        payload.graduationYear = parseInt(formData.graduationYear);
+      }
+      if (role === "MENTOR") {
+        payload.placedCompany = formData.placedCompany;
+        payload.placedPosition = formData.placedPosition;
+        payload.phoneNumber = formData.phoneNumber;
+        payload.linkedinProfile = formData.linkedinProfile;
+        payload.departmentId = parseInt(formData.departmentId);
+        payload.placementYear = parseInt(formData.placementYear);
+      }
+      
+      const response = await authAPI.register(payload);
+      login(response.data.user);
+      toast.success("Registration successful!");
+      
+      if (role === "MENTOR") {
+        navigate("/mentor-dashboard");
+      } else {
+        navigate("/student-dashboard");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 0: Role Selection
+  const renderRoleStep = () => (
+    <div className="otp-section">
+      <div className="otp-header">
+        <h2>Join as</h2>
+        <p>Select how you want to register</p>
+      </div>
+      <div className="role-selection-cards">
+        <div 
+          className="role-card" 
+          onClick={() => handleRoleSelect("STUDENT")}
+        >
+          <div className="role-card-icon">🎓</div>
+          <h3>Student</h3>
+          <p>Share your interview experiences and learn from others</p>
+          <span className="role-note">Requires GCT email verification</span>
+        </div>
+        <div 
+          className="role-card" 
+          onClick={() => handleRoleSelect("MENTOR")}
+        >
+          <div className="role-card-icon">👨‍🏫</div>
+          <h3>Mentor</h3>
+          <p>Guide students with your industry experience</p>
+          <span className="role-note">Any email allowed</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Step 1: Email Entry (Students only)
+  const renderEmailStep = () => (
+    <div className="otp-section">
+      <div className="otp-header">
+        <h2>Verify Your GCT Email</h2>
+        <p>Only GCT students (@gct.ac.in) can register as students</p>
+      </div>
+      <div className="form-group">
+        <label>GCT Email Address *</label>
+        <input
+          type="email"
+          name="email"
+          value={formData.email}
+          onChange={handleChange}
+          placeholder="yourrollno@gct.ac.in"
+          required
+        />
+        {formData.email && !isGCTEmail(formData.email) && (
+          <span className="email-warning">⚠️ Must be a GCT email (@gct.ac.in)</span>
+        )}
+      </div>
+      <button
+        type="button"
+        className="auth-submit otp-btn"
+        onClick={handleSendOTP}
+        disabled={otpSending || !isGCTEmail(formData.email)}
+      >
+        {otpSending ? "Sending OTP..." : "Send OTP"}
+      </button>
+      <div className="otp-actions">
+        <button
+          type="button"
+          className="change-email-btn"
+          onClick={() => {
+            setCurrentStep("role");
+            setRole("");
+          }}
+        >
+          ← Back to Role Selection
+        </button>
+      </div>
+    </div>
+  );
+
+  // Step 2: OTP Verification (Students only)
+  const renderOTPStep = () => (
+    <div className="otp-section">
+      <div className="otp-header">
+        <h2>Enter OTP</h2>
+        <p>We've sent a 6-digit code to {formData.email}</p>
+      </div>
+      <div className="form-group">
+        <label>Enter OTP *</label>
+        <input
+          type="text"
+          value={otp}
+          onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          placeholder="Enter 6-digit OTP"
+          maxLength={6}
+          className="otp-input"
+        />
+      </div>
+      <button
+        type="button"
+        className="auth-submit"
+        onClick={handleVerifyOTP}
+        disabled={otpVerifying || otp.length !== 6}
+      >
+        {otpVerifying ? "Verifying..." : "Verify OTP"}
+      </button>
+      <div className="otp-actions">
+        <button
+          type="button"
+          className="resend-btn"
+          onClick={handleResendOTP}
+          disabled={countdown > 0}
+        >
+          {countdown > 0 ? `Resend OTP in ${countdown}s` : "Resend OTP"}
+        </button>
+        <button
+          type="button"
+          className="change-email-btn"
+          onClick={() => {
+            setCurrentStep("email");
+            setOtp("");
+          }}
+        >
+          Change Email
+        </button>
+      </div>
+    </div>
+  );
+
+  // Step 3: Registration Form
+  const renderFormStep = () => (
+    <form className="auth-form" onSubmit={handleSubmit}>
+      {role === "STUDENT" && (
+        <div className="verified-email">
+          <span className="verified-icon">✅</span>
+          <span>{formData.email}</span>
+          <span className="verified-badge">Verified</span>
+        </div>
+      )}
+      
+      <div className="selected-role-badge">
+        Registering as: <strong>{role === "STUDENT" ? "Student 🎓" : "Mentor 👨‍🏫"}</strong>
+      </div>
+      
+      <div className="form-group">
+        <label>Full Name *</label>
+        <input
+          type="text"
+          name="name"
+          value={formData.name}
+          onChange={handleChange}
+          placeholder="Enter your full name"
+          required
+        />
+      </div>
+      
+      {role === "MENTOR" && (
+        <div className="form-group">
+          <label>Email *</label>
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            placeholder="Enter your email"
+            required
+          />
+        </div>
+      )}
+      
+      <div className="form-group">
+        <label>Password *</label>
+        <input
+          type="password"
+          name="password"
+          value={formData.password}
+          onChange={handleChange}
+          placeholder="Create a password"
+          required
+          minLength={6}
+        />
+      </div>
+      
+      {role === "STUDENT" && (
+        <div className="student-fields">
+          <div className="form-group">
+            <label>Department *</label>
+            <select
+              name="departmentId"
+              value={formData.departmentId}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Department</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.departmentName} ({d.departmentCode})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Expected Graduation Year *</label>
+            <input
+              type="number"
+              name="graduationYear"
+              value={formData.graduationYear}
+              onChange={handleChange}
+              placeholder="e.g., 2025"
+              min={new Date().getFullYear()}
+              max={new Date().getFullYear() + 5}
+              required
+            />
+          </div>
+        </div>
+      )}
+      
+      {role === "MENTOR" && (
+        <div className="mentor-fields">
+          <div className="form-group">
+            <label>Department *</label>
+            <select
+              name="departmentId"
+              value={formData.departmentId}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Department</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.departmentName} ({d.departmentCode})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Company Placed At *</label>
+            <input
+              type="text"
+              name="placedCompany"
+              value={formData.placedCompany}
+              onChange={handleChange}
+              placeholder="e.g., Google, Microsoft"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Position *</label>
+            <input
+              type="text"
+              name="placedPosition"
+              value={formData.placedPosition}
+              onChange={handleChange}
+              placeholder="e.g., Software Engineer"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Placement Year *</label>
+            <input
+              type="number"
+              name="placementYear"
+              value={formData.placementYear}
+              onChange={handleChange}
+              placeholder="e.g., 2024"
+              min="2020"
+              max={new Date().getFullYear() + 1}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Phone Number (optional)</label>
+            <input
+              type="tel"
+              name="phoneNumber"
+              value={formData.phoneNumber}
+              onChange={handleChange}
+              placeholder="Your contact number"
+            />
+          </div>
+          <div className="form-group">
+            <label>LinkedIn Profile (optional)</label>
+            <input
+              type="text"
+              name="linkedinProfile"
+              value={formData.linkedinProfile}
+              onChange={handleChange}
+              placeholder="linkedin.com/in/yourprofile"
+            />
+          </div>
+        </div>
+      )}
+      
+      <button type="submit" className="auth-submit" disabled={loading}>
+        {loading ? "Creating Account..." : "Create Account"}
+      </button>
+      
+      <div className="otp-actions">
+        <button
+          type="button"
+          className="change-email-btn"
+          onClick={() => {
+            setCurrentStep("role");
+            setRole("");
+            setEmailVerified(false);
+            setOtp("");
+          }}
+        >
+          ← Change Role
+        </button>
+      </div>
+    </form>
+  );
+
+  // Get progress steps based on role
+  const getProgressSteps = () => {
+    if (role === "STUDENT") {
+      return (
+        <div className="otp-progress">
+          <div className={`progress-step ${currentStep === "role" ? "active" : (role ? "completed" : "")}`}>
+            <span className="step-number">1</span>
+            <span className="step-label">Role</span>
+          </div>
+          <div className={`progress-line ${currentStep !== "role" ? "active" : ""}`}></div>
+          <div className={`progress-step ${currentStep === "email" ? "active" : emailVerified ? "completed" : ""}`}>
+            <span className="step-number">2</span>
+            <span className="step-label">Email</span>
+          </div>
+          <div className={`progress-line ${currentStep === "otp" || emailVerified ? "active" : ""}`}></div>
+          <div className={`progress-step ${currentStep === "otp" ? "active" : emailVerified ? "completed" : ""}`}>
+            <span className="step-number">3</span>
+            <span className="step-label">Verify</span>
+          </div>
+          <div className={`progress-line ${emailVerified ? "active" : ""}`}></div>
+          <div className={`progress-step ${currentStep === "form" ? "active" : ""}`}>
+            <span className="step-number">4</span>
+            <span className="step-label">Register</span>
+          </div>
+        </div>
+      );
+    } else if (role === "MENTOR") {
+      return (
+        <div className="otp-progress">
+          <div className={`progress-step ${currentStep === "role" ? "active" : "completed"}`}>
+            <span className="step-number">1</span>
+            <span className="step-label">Role</span>
+          </div>
+          <div className={`progress-line ${currentStep === "form" ? "active" : ""}`}></div>
+          <div className={`progress-step ${currentStep === "form" ? "active" : ""}`}>
+            <span className="step-number">2</span>
+            <span className="step-label">Register</span>
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div className="otp-progress">
+          <div className="progress-step active">
+            <span className="step-number">1</span>
+            <span className="step-label">Role</span>
+          </div>
+          <div className="progress-line"></div>
+          <div className="progress-step">
+            <span className="step-number">2</span>
+            <span className="step-label">Register</span>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  return (
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-header">
+          <h1>Create Account</h1>
+          <p>Join GCT Placement Community</p>
+        </div>
+        
+        {getProgressSteps()}
+
+        {currentStep === "role" && renderRoleStep()}
+        {currentStep === "email" && renderEmailStep()}
+        {currentStep === "otp" && renderOTPStep()}
+        {currentStep === "form" && renderFormStep()}
+
+        <p className="auth-footer">
+          Already have an account? <Link to="/login">Sign in</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default Register;
