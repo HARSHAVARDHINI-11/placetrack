@@ -236,7 +236,7 @@ function Register() {
       <div className="role-selection-cards">
         <div className="role-card" onClick={() => handleRoleSelect("STUDENT")}>
           <h3>Student</h3>
-           <p>Lets get started to share your interview experience</p>
+           <p>Lets get started to share your interview experiences</p>
         </div>
 
         <div className="role-card" onClick={() => handleRoleSelect("MENTOR")}>
