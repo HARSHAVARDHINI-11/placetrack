@@ -1,0 +1,355 @@
+﻿
+
+                     PLACEMENT TRACKER - COMPLETE PROJECT ANALYSIS
+
+
+ PROJECT ARCHITECTURE
+
+
+
+                          USER INTERFACE                                  
+  Browsers (Chrome, Firefox, Safari) - Desktop & Mobile                  
+
+                              HTTPS
+                             
+
+                      FRONTEND - React 18.2.0                             
+  Hosted: Vercel CDN (https://placetrack.vercel.app)                     
+   Vite 5.0.8 (Build Tool)                                              
+   React Router 6.21.1 (Navigation)                                     
+   Axios (HTTP Client)                                                  
+   React Toastify (Notifications)                                       
+   CSS3 (Responsive Design)                                             
+
+                              REST API (HTTP/HTTPS)
+                             
+
+                      BACKEND - Spring Boot 3.4.1                         
+  Hosted: Oracle Cloud VM (16.171.175.201:8080)                          
+   Java 21                                                              
+   Spring Data MongoDB                                                  
+   Spring Mail (Gmail SMTP)                                             
+   BCrypt Password Encryption                                           
+   Swagger/OpenAPI 3.0 Documentation                                    
+   Maven Build System                                                   
+
+                              MongoDB Protocol
+                             
+
+                      DATABASE - MongoDB Atlas                            
+  URI: mongodb+srv://cluster0.z8mzpf0.mongodb.net                        
+  Database: placement_tracker_db                                          
+  Collections: 7 (users, departments, companies, mentors,                
+                  interview_experiences, placement_experiences, admins)   
+
+
+
+ FRONTEND STRUCTURE (placement-tracker-frontend/)
+
+
+src/
+  App.js                    - Main routing component
+  index.js                  - React entry point
+
+  components/
+    ErrorBoundary.js         - Global error handler
+    Navbar.js                - Navigation bar
+    Navbar.css
+
+  context/
+    AuthContext.js           - User authentication state management
+                                  (localStorage-based session)
+
+  pages/ (28 components)
+    Home.js                  - Landing page
+    Login.js                 - User login (Students/Mentors)
+    Register.js              - User registration with OTP
+    AdminLogin.js            - Admin login
+   
+    StudentDashboard.js      - Student portal
+    MentorDashboard.js       - Mentor portal
+    AdminDashboard.js        - Admin management panel
+   
+    Experiences.js           - Browse all experiences
+    AddExperience.js         - Submit new experience
+    EditExperience.js        - Edit existing experience
+    ExperienceDetail.js      - View full experience details
+   
+    DepartmentExperiences.js - Filter by department
+    CompanyExperiences.js    - Filter by company
+    Mentors.js               - Browse mentors
+   
+    Profile.js               - User profile management
+
+  services/
+    api.js                   - Centralized API endpoints
+                                  (8 API modules: auth, department,
+                                   company, experience, placement,
+                                   admin, file upload, forgot password)
+
+  vite.config.js            - Vite build configuration
+
+
+ BACKEND STRUCTURE (Placement_Tracker/)
+
+
+src/main/java/com/quizapplication/placement_tracker/
+
+  PlacementTrackerApplication.java  - Spring Boot entry point
+
+  config/
+    CorsConfig.java          - Cross-Origin Resource Sharing setup
+
+  controller/ (7 REST Controllers)
+    AuthController.java      - /api/auth/* (login, register, OTP)
+    DepartmentController.java- /api/departments/*
+    CompanyController.java   - /api/companies/*
+    InterviewExperienceController.java
+    PlacementExperienceController.java
+    AdminController.java     - /api/admin/*
+    FileUploadController.java- /api/files/upload
+
+  entity/ (9 Data Models)
+    User.java                - users collection
+    Mentor.java              - mentors collection (separate)
+    Admin.java               - admins collection
+    Department.java          - departments collection
+    Company.java             - companies collection
+    InterviewExperience.java - interview_experiences collection
+    PlacementExperience.java - placement_experiences collection
+    UserRole.java (enum)     - STUDENT, MENTOR, ADMIN
+    DepartmentGroup.java     - CS_IT, ELECTRONICS, MECHANICAL, etc.
+
+  service/ (7 Business Logic Services)
+    AuthService.java         - Authentication & User management
+    EmailService.java        - OTP & notification emails (Gmail SMTP)
+    DepartmentService.java
+    CompanyService.java
+    InterviewExperienceService.java
+    PlacementExperienceService.java
+    AdminService.java
+
+  repository/ (7 MongoDB Repositories)
+    UserRepository.java
+    MentorRepository.java
+    AdminRepository.java
+    DepartmentRepository.java
+    CompanyRepository.java
+    InterviewExperienceRepository.java
+    PlacementExperienceRepository.java
+
+  dto/ (Data Transfer Objects)
+    Various request/response DTOs
+
+  exception/
+     Custom exception handlers
+
+
+ DATABASE STRUCTURE (placement_tracker_db)
+
+
+1  users (Main user collection)
+     id, email (unique), password (BCrypt hashed)
+     fullName, role (STUDENT/MENTOR)
+     departmentId, graduationYear
+     For Mentors: placedCompany, placedPosition, placementYear
+                    location, contactVisibility (PUBLIC/ADMIN_ONLY)
+     isApproved (mentor verification status)
+
+2  mentors (Separate verified mentor profiles)
+     id, fullName, email, phoneNumber
+     linkedinProfile, placedCompany, placedPosition
+     placementYear, departmentIds[]
+     isActive
+
+3  admins
+     id, username (unique), password (hashed)
+     fullName, email
+     createdAt, lastLogin
+     isActive
+
+4  departments
+     id, departmentName, departmentCode (CSE, IT, ECE, etc.)
+     description, departmentGroup
+     isActive
+
+5  companies
+     id, companyName (unique), description
+     industry, website, logoUrl, headquarters
+     interviewExperienceIds[]
+     createdAt, createdById
+
+6  interview_experiences
+     id, studentName, rollNumber, department
+     companyName, position, yearOfPlacement
+     totalRounds, roundsJson (interview rounds data)
+     result (PLACED/REJECTED), salary
+     internOffered, hasBond, bondDetails
+     tips, resources[]
+     createdAt, updatedAt
+
+7  placement_experiences (comprehensive format)
+     Similar to interview_experiences
+     More detailed round-by-round breakdown
+     Enhanced metadata
+
+
+ AUTHENTICATION & AUTHORIZATION
+
+
+
+                        USER REGISTRATION FLOW                            
+
+
+STUDENTS:
+1. Select 'Student' role
+2. Enter @gct.ac.in email (validated)
+3. Receive OTP via email (6-digit code, 60s timeout)
+4. Verify OTP
+5. Complete registration form
+6.  Auto-approved, can login immediately
+
+MENTORS:
+1. Select 'Mentor' role
+2. Enter any valid email
+3. Receive OTP via email
+4. Verify OTP
+5. Complete mentor details (company, position, LinkedIn, phone)
+6. Choose contact visibility (PUBLIC or ADMIN_ONLY)
+7.  Auto-approved (no admin verification needed)
+
+ADMINS:
+- Created by existing admins only
+- No self-registration
+- Username + password login
+
+
+ API ENDPOINTS (75+ endpoints)
+
+
+ Authentication (/api/auth)
+   POST   /register              - User registration
+   POST   /login                 - User login
+   POST   /send-otp              - Send email OTP
+   POST   /verify-otp            - Verify OTP
+   GET    /user/{id}             - Get user by ID
+   PUT    /user/{id}/profile     - Update profile
+   GET    /mentors               - Get all mentors
+   GET    /mentors/pending       - Get pending mentor approvals
+   PUT    /mentors/{id}/approve  - Approve mentor
+   DELETE /mentors/{id}/reject   - Reject mentor
+
+ Companies (/api/companies)
+   GET    /                      - Get all companies
+   POST   /                      - Create company
+   GET    /{id}                  - Get by ID
+   GET    /name/{name}           - Get by name
+   GET    /search?query=...      - Search companies
+   GET    /exists?companyName=...- Check if exists
+
+ Departments (/api/departments)
+   GET    /                      - Get all departments
+   GET    /{id}                  - Get by ID
+   GET    /group/{group}         - Get by department group
+
+ Experiences (/api/experiences)
+   GET    /                      - Get all experiences
+   POST   /                      - Create experience
+   GET    /{id}                  - Get by ID
+   PUT    /{id}                  - Update experience
+   DELETE /{id}                  - Delete experience
+   GET    /department/{id}       - Filter by department
+   GET    /search/company?name=...- Search by company
+   GET    /year/{year}           - Filter by year
+
+ Admin (/api/admin)
+   POST   /login                 - Admin login
+   POST   /create                - Create new admin
+   GET    /users                 - Get all users
+   GET    /mentors               - Get all mentors
+   PUT    /mentors/{id}          - Update mentor
+   DELETE /users/{id}            - Delete user
+
+
+ FRONTEND FEATURES
+
+
+ Responsive Design (Mobile, Tablet, Desktop)
+ Modern Split-Screen Auth Pages (Login/Register)
+ Real-time Toast Notifications
+ Protected Routes (Role-based access)
+ Email OTP Verification
+ PDF Export (jsPDF + html2canvas)
+ File Upload Support
+ Form Validation (Client-side)
+ Error Boundary (Crash prevention)
+ Context-based State Management
+ Dynamic Department/Company Filtering
+
+
+ DEPLOYMENT CONFIGURATION
+
+
+FRONTEND (Vercel):
+   Build Command: vite build
+   Output Directory: dist
+   Environment Variables:
+      VITE_API_URL=https://plcetrack.serverpit.com/api
+   Domain: https://placetrack.vercel.app (custom domain)
+
+BACKEND (Oracle Cloud VM):
+   Instance: Ubuntu 22.04 (Always-Free Tier)
+   Public IP: 16.171.175.201
+   Port: 8080 (opened in firewall)
+   Process: systemd service (placement-tracker.service)
+   Environment Variables:
+      SPRING_DATA_MONGODB_URI=mongodb+srv://...
+      MAIL_USERNAME=harshavardhinin6@gmail.com
+      MAIL_PASSWORD=qntw bjez nxce elwu
+   Deployment: JAR file (Placement_Tracker-0.0.1-SNAPSHOT.jar)
+
+DATABASE (MongoDB Atlas):
+   Cluster: cluster0.z8mzpf0.mongodb.net
+   User: Harshavardhini
+   Password: Harsha@123 (URL-encoded: Harsha%40123)
+   Database: placement_tracker_db
+
+
+ CURRENT STATUS
+
+
+ Frontend: Deployed on Vercel, latest commit 'Move Back to Home'
+ Backend: Built successfully (35MB JAR)
+ Backend Deployment: FAILING - MongoDB authentication error
+ API Status: 502 Bad Gateway (backend not running)
+
+ISSUE: Environment variable SPRING_DATA_MONGODB_URI not persisting
+SOLUTION NEEDED: Create systemd service with proper environment setup
+
+
+ KEY DOCUMENTATION FILES
+
+
+ PROJECT_DESCRIPTION.md          - Complete project overview
+ DEPLOYMENT_GUIDE.md             - Step-by-step deployment
+ MONGODB_COLLECTIONS_STRUCTURE.md- Database schema
+ VERCEL_DEPLOYMENT_GUIDE.md      - Frontend deployment
+ ORACLE_CLOUD_SETUP_CHECKLIST.md - VM setup guide
+ TESTING_GUIDE.md                - Testing procedures
+ APPLICATION_ANALYSIS_AND_FIXES.md- Bug fixes log
+
+
+ IMPORTANT URLS
+
+
+ GitHub Repository: https://github.com/HARSHAVARDHINI-11/placetrack.git
+ Frontend (Vercel): https://placetrack.vercel.app
+ Backend API: https://plcetrack.serverpit.com/api
+ Swagger Docs: https://plcetrack.serverpit.com/swagger-ui.html
+ MongoDB Atlas: https://cloud.mongodb.com
+
+
+
+                              END OF ANALYSIS
+
+
